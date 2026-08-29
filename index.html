@@ -467,17 +467,42 @@ async function decifrar(b64){
 async function carregarHabilidade(h){
   if(cache[h])return cache[h];
   let b64;
+
   if(MODO_BANCO==="drive"){
-    if(!ENVIO)throw new Error("sem endereço do Apps Script");
-    const d=await jsonp(ENVIO+"?lista="+encodeURIComponent(h),40000);
-    if(!d||!d.ok||!d.dados)throw new Error((d&&d.erro)||"lista não encontrada");
-    b64=d.dados;
+    if(!ENVIO)throw new Error("O endereço do Apps Script não está configurado no site.");
+    let d;
+    try{
+      d=await jsonp(ENVIO+"?lista="+encodeURIComponent(h),45000);
+    }catch(e){
+      throw new Error("O servidor das questões não respondeu ("+e.message+"). "
+        +"Confira se o endereço do Apps Script no site é o da implantação ativa.");
+    }
+    if(!d)throw new Error("O servidor respondeu vazio.");
+    if(!d.ok)throw new Error("O servidor recusou: "+(d.erro||"motivo não informado"));
+    if(!d.dados)throw new Error("O servidor respondeu sem o conteúdo da lista.");
+    b64=String(d.dados).trim();
   }else{
     const r=await fetch("dados/"+h+".txt",{cache:"force-cache"});
-    if(!r.ok)throw new Error("não foi possível baixar a habilidade "+h);
+    if(!r.ok)throw new Error("Não foi possível baixar o arquivo dados/"+h+".txt.");
     b64=(await r.text()).trim();
   }
-  const p=await decifrar(b64);cache[h]=p;return p;
+
+  if(!/^[A-Za-z0-9+/=\s]+$/.test(b64.slice(0,200))){
+    throw new Error("O arquivo de "+h+" não veio como texto cifrado. "
+      +"No Drive, ele provavelmente foi convertido para Documentos Google — "
+      +"reenvie os .txt com a conversão automática desligada.");
+  }
+
+  let p;
+  try{
+    p=await decifrar(b64);
+  }catch(e){
+    throw new Error("O conteúdo de "+h+" chegou, mas não pôde ser aberto. "
+      +"O arquivo pode ter sido alterado ou truncado no envio ao Drive.");
+  }
+  if(!p||!Array.isArray(p.lista)||!p.lista.length)
+    throw new Error("O pacote de "+h+" abriu, mas está sem questões.");
+  cache[h]=p;return p;
 }
 function resolverImagens(raiz){
   raiz.querySelectorAll("img[data-k]").forEach(im=>{
@@ -549,8 +574,9 @@ $("btnIniciar").addEventListener("click",async()=>{
   }catch(e){
     $("dicaCarga").textContent=(typeof DecompressionStream==="undefined")
       ? "Este navegador é antigo demais para abrir as questões. Tente pelo Chrome, Firefox ou Safari atualizados."
-      : "Não foi possível carregar esta habilidade agora. Verifique a conexão e tente de novo em alguns instantes.";
+      : e.message;
     $("dicaCarga").style.color="var(--erro)";
+    console.error("[GCN] falha ao carregar",S.hab,e);
   }finally{bt.disabled=false;}
 });
 
