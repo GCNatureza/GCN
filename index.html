@@ -396,11 +396,11 @@ mjx-container{max-width:100%;overflow-x:auto;overflow-y:hidden}
    onde baixá-los. Com MODO_BANCO = "pasta", ficam em  dados/  ao lado
    deste arquivo (mais rápido, mas acessível por URL).
 
-   SENHA DO PROFESSOR: 
+   SENHA DO PROFESSOR: gcn2026
    Acesso por  #professor  no endereço ou cinco toques no logo.
    ===================================================================== */
 
-const MODO_BANCO = "pasta";   /* "drive" = pasta privada via Apps Script · "pasta" = dados/ */
+const MODO_BANCO = "drive";   /* "drive" = pasta privada via Apps Script · "pasta" = dados/ */
 
 const CHAVE_BANCO = "gcn-cn-2026-a7f31d9c4e8b";
 const ITERACOES = 1000;
@@ -421,6 +421,7 @@ const media=a=>a.reduce((x,y)=>x+y,0)/a.length;
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const fmtD=v=>(v==null||isNaN(v))?"—":Math.round(v).toString();
 const cache={};
+let FONTE_USADA="—";
 
 function mostrar(id){
   ["tela1","tela2","tela3","tela4","tela5","telaPainel","telaSenha","telaBanco"].forEach(t=>$(t).classList.add("oculto"));
@@ -468,23 +469,32 @@ async function carregarHabilidade(h){
   if(cache[h])return cache[h];
   let b64;
 
-  if(MODO_BANCO==="drive"){
+  async function doDrive(){
     if(!ENVIO)throw new Error("O endereço do Apps Script não está configurado no site.");
-    let d;
-    try{
-      d=await jsonp(ENVIO+"?lista="+encodeURIComponent(h),45000);
-    }catch(e){
-      throw new Error("O servidor das questões não respondeu ("+e.message+"). "
-        +"Confira se o endereço do Apps Script no site é o da implantação ativa.");
-    }
+    const d=await jsonp(ENVIO+"?lista="+encodeURIComponent(h),45000);
     if(!d)throw new Error("O servidor respondeu vazio.");
     if(!d.ok)throw new Error("O servidor recusou: "+(d.erro||"motivo não informado"));
     if(!d.dados)throw new Error("O servidor respondeu sem o conteúdo da lista.");
-    b64=String(d.dados).trim();
-  }else{
+    return String(d.dados).trim();
+  }
+  async function daPasta(){
     const r=await fetch("dados/"+h+".txt",{cache:"force-cache"});
     if(!r.ok)throw new Error("Não foi possível baixar o arquivo dados/"+h+".txt.");
-    b64=(await r.text()).trim();
+    return (await r.text()).trim();
+  }
+
+  if(MODO_BANCO==="drive"){
+    try{
+      b64=await doDrive();
+      FONTE_USADA="drive";
+    }catch(e){
+      /* rede de segurança: se a pasta ainda existir no site, o aluno não fica parado */
+      try{ b64=await daPasta(); FONTE_USADA="pasta (o Drive falhou: "+e.message+")"; }
+      catch(e2){ throw e; }
+    }
+  }else{
+    b64=await daPasta();
+    FONTE_USADA="pasta";
   }
 
   if(!/^[A-Za-z0-9+/=\s]+$/.test(b64.slice(0,200))){
@@ -974,7 +984,8 @@ async function abrirProfessor(){mostrar("telaBanco");marcarPasso(0);await listar
     (MODO_BANCO==="drive"
       ? ` numa pasta <b>privada</b> do Drive, entregues pelo Apps Script. Não há endereço público de onde baixá-los.`
       : ` na pasta <code style="font-family:var(--mono)">dados/</code>, ao lado do index.`)+
-    ` Cada aluno carrega só a habilidade que escolhe.`;}
+    ` Cada aluno carrega só a habilidade que escolhe.`
+    +` <br><br>Origem da última lista carregada neste navegador: <b>${esc(FONTE_USADA)}</b>.`;}
 async function conferirSenha(){
   const v=$("senha").value;if(!v)return;
   if(await sha256(v)===SENHA_HASH){liberado=true;abrirProfessor();}
