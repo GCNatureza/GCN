@@ -152,6 +152,23 @@ mjx-container{max-width:100%;overflow-x:auto;overflow-y:hidden}
 @keyframes gira{to{transform:rotate(360deg)}}
 .oculto{display:none !important}
 .rodape{margin-top:40px;padding-top:20px;border-top:1px solid var(--linha);font-size:12.5px;color:var(--neutro);font-family:var(--mono);letter-spacing:.03em}
+
+/* folha de marcação (lista já feita no papel) */
+.folha{border:1px solid var(--linha);border-radius:var(--r);overflow:hidden;background:#fff}
+.folha-cab{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  background:var(--petroleo);color:#fff;padding:12px 16px;font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+.linha-q{display:flex;align-items:center;gap:14px;padding:9px 16px;border-bottom:1px solid #eaf0f2}
+.linha-q:last-child{border-bottom:none}
+.linha-q:nth-child(even){background:#fafcfc}
+.num-q{font-family:var(--mono);font-weight:700;font-size:14px;width:30px;color:var(--petroleo);flex:none}
+.bolhas{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+.bolha-alt{width:36px;height:36px;border-radius:50%;border:1.5px solid var(--linha);background:#fff;
+  font-family:var(--mono);font-weight:700;font-size:13px;color:var(--neutro);display:grid;place-items:center;transition:all .1s}
+.bolha-alt:hover{border-color:var(--petroleo-3);color:var(--petroleo)}
+.bolha-alt.on{background:var(--petroleo);border-color:var(--petroleo);color:#fff}
+.tog{border-radius:7px;width:auto;padding:0 14px;height:36px;font-family:var(--corpo);font-weight:600;font-size:13.5px}
+.tog.on-c{background:var(--acerto);border-color:var(--acerto);color:#fff}
+.tog.on-e{background:var(--erro);border-color:var(--erro);color:#fff}
 @media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
 </style>
 </head>
@@ -199,6 +216,16 @@ mjx-container{max-width:100%;overflow-x:auto;overflow-y:hidden}
     <div class="card">
       <label class="rot" for="hab">Habilidade desta vez</label>
       <select id="hab"></select>
+      <label class="rot" style="margin-top:20px">Como você vai responder a lista</label>
+      <div class="opcoes" id="modos">
+        <label class="opcao sel" data-modo="tela"><input type="radio" name="modo" value="tela" checked>
+          <b>Na tela, agora</b><span>As questões aparecem uma a uma, ajustadas ao seu desempenho.</span></label>
+        <label class="opcao" data-modo="letra"><input type="radio" name="modo" value="letra">
+          <b>Já fiz no papel — marcar as letras</b><span>Você registra a alternativa que assinalou em cada questão.</span></label>
+        <label class="opcao" data-modo="acerto"><input type="radio" name="modo" value="acerto">
+          <b>Já fiz no papel — marcar acertei/errei</b><span>Mais rápido, se você já corrigiu a lista.</span></label>
+      </div>
+
       <label class="rot" style="margin-top:20px">Quando você quer ver se acertou</label>
       <div class="opcoes" id="fbs">
         <label class="opcao sel" data-fb="1"><input type="radio" name="fb" value="1" checked>
@@ -214,6 +241,21 @@ mjx-container{max-width:100%;overflow-x:auto;overflow-y:hidden}
   <!-- 2 · LISTA DA HABILIDADE -->
   <section id="tela2" class="oculto">
     <p class="olho" id="olhoL">Lista da habilidade</p>
+
+    <div id="blocoFolha" class="oculto">
+      <p class="lead" id="instrFolha"></p>
+      <div class="folha">
+        <div class="folha-cab"><span>Questão</span><span id="progFolha">0 / 20 preenchidas</span></div>
+        <div id="linhasFolha"></div>
+      </div>
+      <div class="barra-acoes">
+        <button class="btn ouro" id="btnCalcular" disabled>Calcular minha proficiência</button>
+        <button class="btn fantasma mini" id="btnLimpar">Limpar marcações</button>
+        <button class="btn fantasma mini" id="btnVoltarInicio">Voltar</button>
+      </div>
+    </div>
+
+    <div id="blocoQuestao">
     <div class="card">
       <div class="q-cab"><span class="q-id" id="lId">—</span><span class="q-passo" id="lPasso">—</span></div>
       <div class="enunciado" id="lEnunciado"></div>
@@ -229,6 +271,7 @@ mjx-container{max-width:100%;overflow-x:auto;overflow-y:hidden}
       <div class="trilha" id="lTrilha"></div>
       <div class="pontos" id="lPontos"></div>
       <p class="dica">A cada acerto você sobe de faixa; a cada erro, desce. As 20 questões são respondidas até o fim.</p>
+    </div>
     </div>
   </section>
 
@@ -411,7 +454,7 @@ const INDICE = [{"codigo":"H1","titulo":"Reconhecer características ou propried
 const LETRAS = ["A","B","C","D","E"];
 const ESCALA = "enem";
 
-const S = {nome:"",slug:"",hab:null,fbImediato:true,pacote:null,IMG:{},
+const S = {nome:"",slug:"",hab:null,modo:"tela",fbImediato:true,respFolha:{},pacote:null,IMG:{},
   ordenadas:[],respL:[],faixaAlvo:0,atualL:null,travadoL:false,escolhaL:null,
   resL:null,serie:[],motivo:"",idx:0,respB:[],escolha:null,travado:false,
   aluno:null,prof2:null};
@@ -525,6 +568,9 @@ function resolverImagens(raiz){
 
 /* ---------------- tela 1 ---------------- */
 $("hab").innerHTML=INDICE.map(h=>`<option value="${esc(h.codigo)}">${esc(h.codigo)} — ${esc(h.titulo)}</option>`).join("");
+document.querySelectorAll("#modos .opcao").forEach(o=>o.addEventListener("click",()=>{
+  document.querySelectorAll("#modos .opcao").forEach(x=>x.classList.remove("sel"));
+  o.classList.add("sel");S.modo=o.dataset.modo;}));
 document.querySelectorAll("#fbs .opcao").forEach(o=>o.addEventListener("click",()=>{
   document.querySelectorAll("#fbs .opcao").forEach(x=>x.classList.remove("sel"));
   o.classList.add("sel");S.fbImediato=o.dataset.fb==="1";}));
@@ -598,11 +644,54 @@ function faixaDe(i,n){const [a,b]=limites(n);return i<a?0:(i<b?1:2);}
 function iniciarLista(){
   S.ordenadas=[...S.pacote.lista].sort((x,y)=>x.dificuldade-y.dificuldade)
     .map((q,i)=>({...q,pos:i}));
-  S.respL=[];S.faixaAlvo=0;
+  S.respL=[];S.faixaAlvo=0;S.respFolha={};
   $("olhoL").textContent=`Lista da habilidade · ${S.pacote.codigo}`;
+  const naTela=S.modo==="tela";
+  $("blocoQuestao").classList.toggle("oculto",!naTela);
+  $("blocoFolha").classList.toggle("oculto",naTela);
   mostrar("tela2");marcarPasso(2);
-  proximaDaLista();
+  if(naTela)proximaDaLista(); else montarFolha();
 }
+
+/* ---- folha de marcação: numeração original da lista ---- */
+function montarFolha(){
+  const qs=[...S.pacote.lista].sort((a,b)=>a.n-b.n);
+  $("instrFolha").textContent=S.modo==="letra"
+    ? "Para cada questão da sua lista impressa, marque a letra que você assinalou. O gabarito fica escondido até o cálculo."
+    : "Para cada questão da sua lista impressa, indique se você acertou ou errou.";
+  $("linhasFolha").innerHTML=qs.map(q=>{
+    const c=S.modo==="letra"
+      ? LETRAS.map(l=>`<button class="bolha-alt" data-n="${q.n}" data-v="${l}" aria-label="Questão ${q.n}, alternativa ${l}">${l}</button>`).join("")
+      : `<button class="bolha-alt tog" data-n="${q.n}" data-v="C">Acertei</button><button class="bolha-alt tog" data-n="${q.n}" data-v="E">Errei</button>`;
+    return `<div class="linha-q"><span class="num-q">${q.n}</span><span class="bolhas">${c}</span></div>`;
+  }).join("");
+  $("linhasFolha").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+    const n=+b.dataset.n,v=b.dataset.v;
+    if(S.respFolha[n]===v)delete S.respFolha[n];else S.respFolha[n]=v;
+    $("linhasFolha").querySelectorAll(`button[data-n="${n}"]`).forEach(x=>{
+      x.classList.remove("on","on-c","on-e");
+      if(S.respFolha[n]===x.dataset.v)x.classList.add(S.modo==="letra"?"on":(x.dataset.v==="C"?"on-c":"on-e"));
+    });
+    progressoFolha();
+  }));
+  progressoFolha();
+}
+function progressoFolha(){
+  const total=S.pacote.lista.length,f=Object.keys(S.respFolha).length;
+  $("progFolha").textContent=`${f} / ${total} preenchidas`;
+  $("btnCalcular").disabled=f<total;
+}
+$("btnLimpar").addEventListener("click",()=>{S.respFolha={};montarFolha();});
+$("btnVoltarInicio").addEventListener("click",()=>{mostrar("tela1");marcarPasso(1);});
+$("btnCalcular").addEventListener("click",()=>{
+  S.respL=[...S.pacote.lista].sort((a,b)=>a.n-b.n).map(q=>{
+    const r=S.respFolha[q.n];
+    const acertou=S.modo==="letra"?r===q.gabarito:r==="C";
+    return {n:q.n,pos:S.ordenadas.find(o=>o.n===q.n).pos,dificuldade:q.dificuldade,
+      marcada:S.modo==="letra"?r:"—",gabarito:S.modo==="letra"?q.gabarito:"—",acertou};
+  });
+  concluirLista();
+});
 function proximaDaLista(){
   const n=S.ordenadas.length;
   const feitas=new Set(S.respL.map(r=>r.n));
@@ -823,7 +912,8 @@ async function concluir(){
     ...S.respB.map(r=>({l:"X",n:r.n,d:r.dificuldade,m:r.marcada,g:r.gabarito,c:r.acertou?1:0}))];
   const reg={habilidade:S.pacote.codigo,titulo:S.pacote.titulo,data:new Date().toISOString(),
     prof:prof2,profA:S.resL.prof,acertosA:S.resL.certos.length,totalA:S.resL.itens.length,
-    acertosB,totalB:S.respB.length,modo:"na tela",itens:detalhe};
+    acertosB,totalB:S.respB.length,itens:detalhe,
+    modo:S.modo==="tela"?"na tela":(S.modo==="letra"?"letra marcada":"acertei/errei")};
   a.habilidades[S.pacote.codigo]=reg;a.historico.push(reg);
   if(a.historico.length>60)a.historico=a.historico.slice(-60);
   await gravarAluno(a);S.aluno=a;
